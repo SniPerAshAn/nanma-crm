@@ -203,6 +203,12 @@ details.addmenu .opts{display:none}details.addmenu[open] .opts{display:block}
 .timer{background:var(--bar);color:var(--on-bar);border-radius:16px;padding:20px 22px;display:flex;flex-wrap:wrap;align-items:center;gap:16px 26px}
 .timer .clock{font:700 38px/1 var(--fd);font-variant-numeric:tabular-nums}
 @media (max-width:700px){.subrow{grid-template-columns:1fr 1fr}.h1{font-size:24px}}
+#tour .tour-hole{position:fixed;z-index:60;border-radius:10px;box-shadow:0 0 0 9999px rgba(0,0,0,.6),0 0 0 3px #FF0000;pointer-events:none;transition:all .25s ease}
+#tour .tour-hole[data-none]{box-shadow:0 0 0 9999px rgba(0,0,0,.6)}
+#tour .tour-card{position:fixed;z-index:61;background:#fff;color:#000;border-radius:14px;padding:18px 18px 14px;box-shadow:0 12px 40px rgba(0,0,0,.35);border-top:4px solid #FF0000}
+#tour .tour-card h2{margin:4px 0 6px;font-size:18px}#tour .tour-card p{margin:0 0 14px;line-height:1.5;color:#222}
+#tour .tour-meta{font-size:12px;font-weight:700;color:#595959;text-transform:uppercase;letter-spacing:.04em}
+#tour .tour-btns{display:flex;align-items:center;gap:8px}
 </style>
 </head>
 <body>
@@ -1137,6 +1143,7 @@ document.addEventListener("click",e=>{
     case"lv-apply":{lvApplyOpen();break;}case"lv-ok":{lvDecide(t.dataset.u,t.dataset.id,true,"");break;}case"lv-no":{S.modal={type:"lvno",u:t.dataset.u,id:t.dataset.id,f:{note:""}};renderModal();break;}case"lv-cancel":{lvCancel(t.dataset.id);break;}
     case"lv-m":{const [y,mo]=(S.lvYm||thisMonth()).split("-").map(Number);const d=new Date(y,mo-1+Number(t.dataset.d),1);S.lvYm=d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0");renderMain();break;}
     case"lv-paid":{if(!isHR()||!S.admin)break;const v=Number((document.getElementById("lvpaid")||{}).value);if(isNaN(v)||v<0)break;const tm=clone(S.team||{});delete tm.id;tm.leavePaid=v;S.team=tm;write("crm/team",tm);toast("Saved – "+v+" paid leave a month.");renderMain();break;}
+    case"tour-start":tourStart(true);break;
     case"help-all":{const all=[...document.querySelectorAll("details.helpsec")];const open=all.some(d=>!d.open);all.forEach(d=>d.open=open);t.textContent=open?"Close all":"Open all";break;}
     case"help-go":{e.preventDefault();const d=document.getElementById("help-"+t.dataset.k);if(d){d.open=true;d.scrollIntoView({behavior:"smooth",block:"start"});}break;}
     case"client-active":{if(!canPeople())break;const id=t.dataset.id;const c=clone(S.clients[id]);if(!c)break;delete c.id;const off=!c.inactive;if(off){c.inactive=true;c.inactiveAt=Date.now();c.inactiveBy=S.me;}else{delete c.inactive;delete c.inactiveAt;delete c.inactiveBy;}S.clients[id]=Object.assign({id},c);write("clients/"+id,c);logAct(`marked ${c.name} as ${off?"inactive":"active"}`,id);toast(off?`${c.name} is now inactive – find it under Inactive clients.`:`${c.name} is active again.`);renderAll();break;}
@@ -2815,7 +2822,7 @@ function viewHelp(){const lead=canSubs()||isHR()||role(S.me)==="head"||role(S.me
      "<strong>The history says I moved a card, but I didn't.</strong> Automatic moves now say “Moved automatically” – tell HR if you see anything odd.",
      "<strong>I was signed out.</strong> 30 minutes without activity signs you out – tick “Keep me signed in for the rest of today” on your own computer.",
      "<strong>Something looks wrong.</strong> Message HR from the messenger."]))];
-  return `<div class="wrap"><h1 class="h1">How to use Nanma CRM</h1><p class="muted" style="margin:-6px 0 4px">Step-by-step help for everything in the CRM. Click a topic to jump to it, or open any section below. You only see the sections that apply to you.</p>
+  return `<div class="wrap"><div class="between" style="flex-wrap:wrap;gap:10px"><h1 class="h1">How to use Nanma CRM</h1><button class="btn" data-act="tour-start">▶ Take the tour</button></div><p class="muted" style="margin:-6px 0 4px">Step-by-step help for everything in the CRM. Click a topic to jump to it, or open any section below. You only see the sections that apply to you.</p>
    <div class="row" style="gap:6px;flex-wrap:wrap">${T.map(([k,l])=>`<button class="chip" style="cursor:pointer;border:1px solid var(--line)" data-act="help-go" data-k="${k}">${l}</button>`).join("")}<button class="linkbtn small" data-act="help-all" style="margin-left:auto">Open all</button></div>
    ${parts.join("")}</div>`;}
 
@@ -3089,6 +3096,93 @@ document.addEventListener("drop",e=>{if(drag&&drag.tool){const z=e.target.closes
   drag=null;document.querySelectorAll(".col.dropon").forEach(x=>x.classList.remove("dropon"));});
 
 /* ---------- boot ---------- */
+/* ================= Welcome tour (different for staff, managers, heads, HR) ================= */
+function tourKind(){if(S.owner||isHR())return "hr";const r=role(S.me);return r==="head"?"head":r==="manager"?"manager":"staff";}
+const TOUR_KIND_NAME={hr:"HR / Admin",head:"Department head",manager:"Manager",staff:"Staff"};
+function tourSteps(kind){
+  const N=a=>`.nav a[href="#${a}"]`;
+  const W={staff:"Here's a quick tour of what you'll use every day. It takes about a minute.",manager:"As a manager you assign and track your team's work. Here's a quick tour of the tools you'll use.",head:"As a department head you run your department's cards, people and approvals. Here's a quick tour.",hr:"As HR / Admin you can see and manage everything: people, attendance, salaries and reports. Here's a quick tour."}[kind];
+  const s={
+    welcome:{t:`Welcome to Nanma CRM, ${esc((nm(S.me)||"").split(" ")[0]||"there")}!`,x:W},
+    mywork:{sel:N("my-work"),t:"My Work",x:"Your subtasks, sorted by when they're due. Press <b>Start</b> when you begin, <b>Stop</b> for a break and <b>Finish</b> when it's done. Your time is recorded automatically, and overdue work shows at the top in red."},
+    finish:{t:"Finishing your work",x:"When you press <b>Finish</b>, add what you made: a link, a file or a short note. It goes to Internal approval so it can be checked. Production subtasks don't need this."},
+    reviewStaff:{sel:N("review"),t:"Int. approval",x:"Designs, content and videos waiting for approval in your area. You can leave feedback for the person who assigned the work."},
+    reviewLead:{sel:N("review"),t:"Int. approval",x:"Work waiting for internal approval. <b>Approve</b> to send it on, or <b>Send back</b> with notes on what to fix. The timer shows how long it has waited (office hours only, 9 to 6)."},
+    cal:{sel:N("nanma-cal"),t:"Calendar",x:"Holidays, half days, team leave and shoots. Check here before you plan your week."},
+    leave:{sel:N("leave"),t:"Leave",x:"Apply for leave here. It goes to your department head, then HR, and you can follow its status on this page."},
+    leaveLead:{t:"Leave approvals",x:"When someone in your team applies for leave, it comes to you first. You'll see it in <b>Hey!</b> and on the <b>Leave</b> page."},
+    newcard:{sel:'#main [data-act="new-card"]',t:"+ New card",x:"Start a new piece of work for a client. Pick a <b>Format</b> (Reel, Static, Carousel…) and the subtasks fill in with their times, or choose one of your own templates."},
+    assign:{t:"Assigning subtasks",x:"On every card you can add subtasks, choose who does each one and set the minutes. The person sees it straight away in their My Work."},
+    assigned:{sel:N("assigned"),t:"Assigned",x:"Everything you've assigned, by the day it's due. Filter by person to see how much each one has on their plate."},
+    eff:{sel:N("efficiency"),t:"Efficiency",x:"How each person is doing on time and quality, so you can spot who is overloaded or falling behind."},
+    logins:{sel:N("team"),t:kind==="hr"?"Team":"Logins",x:kind==="hr"?"Add people, set their role (Staff, Manager, Department head, Admin) and send them an invite link. Each person creates their own login from the link.":"Create or reset CRM logins for the people in your department."},
+    att:{sel:N("attendance"),t:"Attendance",x:"Monthly attendance and salary. Import the eSSL report, check late marks and overtime, then <b>Finalise</b> the month. Only HR admins see this."},
+    awards:{sel:N("awards"),t:"HR – Awards",x:"Monthly awards worked out from real work data: best designer, on-time delivery and more."},
+    reports:{sel:N("reports"),t:"Reports",x:"Today, this week or any dates you choose: work done, late work and approval times, ready to copy and share."},
+    billing:{sel:N("billing"),t:"Billing",x:"Put a price on cards so Accounts can bill them, and see what's been billed."},
+    opcost:{sel:N("op-cost"),t:"Op. cost",x:"The office's running costs, used to work out what each hour of work costs."},
+    activity:{sel:N("activity"),t:"Activity",x:"A log of everything that happened: who created, moved, approved or changed what, and when."},
+    search:{sel:"#sq",t:"Search",x:"Find any person, client or card by typing a few letters."},
+    hey:{sel:'a[href="#hey"]',t:"Hey!",x:"Your notifications: new work for you, mentions, feedback, leave updates and messages. The red number shows what's new."},
+    dm:{sel:"#dmbtn",t:"Messages",x:"Chat privately with any colleague. You can drag this button anywhere on the screen."},
+    help:{sel:N("help"),t:"Help",x:"Step-by-step guides for everything in the CRM. You can take this tour again from here any time."}
+  };
+  const order={
+    staff:["welcome","mywork","finish","reviewStaff","cal","leave","search","hey","dm","help"],
+    manager:["welcome","newcard","assign","assigned","reviewLead","mywork","cal","leave","hey","dm","help"],
+    head:["welcome","newcard","assign","assigned","reviewLead","eff","logins","leaveLead","reports","billing","hey","help"],
+    hr:["welcome","logins","att","awards","newcard","assigned","reviewLead","eff","reports","billing","opcost","activity","search","hey","help"]
+  }[kind];
+  return order.map(k=>s[k]).filter(st=>!st.sel||document.querySelector(st.sel));
+}
+const TOUR={on:false,i:0,steps:[],kind:"",checked:false};
+function tourRoot(){let r=document.getElementById("tour");if(!r){r=document.createElement("div");r.id="tour";document.body.appendChild(r);}return r;}
+function tourStart(manual){
+  TOUR.kind=tourKind();TOUR.checked=true;
+  if(route().v!=="home"){location.hash="#home";}
+  setTimeout(()=>{TOUR.steps=tourSteps(TOUR.kind);if(!TOUR.steps.length)return;TOUR.on=true;TOUR.i=0;tourDraw();},manual?350:250);
+}
+function tourEnd(){TOUR.on=false;tourRoot().innerHTML="";
+  const p=clone(S.prefs||{});delete p.id;p.tourDone=Object.assign({},p.tourDone||{});p.tourDone[TOUR.kind]=Date.now();S.prefs=p;
+  if(S.db&&S.me)S.db.doc("data/users/"+S.me+"/prefs").set(p).catch(()=>{});}
+function tourDraw(){
+  const r=tourRoot();if(!TOUR.on){r.innerHTML="";return;}
+  const st=TOUR.steps[TOUR.i];const el=st.sel?document.querySelector(st.sel):null;
+  const last=TOUR.i===TOUR.steps.length-1;
+  r.innerHTML=`<div class="tour-hole" ${el?"":'data-none="1"'}></div><div class="tour-card" role="dialog" aria-modal="true" aria-labelledby="tour-t">
+    <div class="tour-meta">${TOUR.i===0?esc(TOUR_KIND_NAME[TOUR.kind])+" tour":`${TOUR.i} of ${TOUR.steps.length-1}`}</div>
+    <h2 id="tour-t">${st.t}</h2><p>${st.x}</p>
+    <div class="tour-btns"><button type="button" class="linkbtn small" data-tour="skip">${last?"":"Skip tour"}</button><span style="flex:1"></span>${TOUR.i>0?`<button type="button" class="btn sm ghost" data-tour="back">Back</button>`:""}<button type="button" class="btn sm" data-tour="next">${last?"Finish":TOUR.i===0?"Start the tour":"Next"}</button></div></div>`;
+  tourPlace();
+  const nb=r.querySelector('[data-tour="next"]');if(nb)nb.focus();
+}
+function tourPlace(){
+  if(!TOUR.on)return;const r=tourRoot();const hole=r.querySelector(".tour-hole"),card=r.querySelector(".tour-card");if(!hole||!card)return;
+  const st=TOUR.steps[TOUR.i];const el=st.sel?document.querySelector(st.sel):null;
+  const vw=innerWidth,vh=innerHeight,cw=Math.min(360,vw-24);card.style.width=cw+"px";
+  if(!el||!el.getBoundingClientRect().width){hole.style.cssText="left:50%;top:50%;width:0;height:0";card.style.left=Math.round((vw-cw)/2)+"px";card.style.top=Math.round(vh/2-card.offsetHeight/2)+"px";return;}
+  const b=el.getBoundingClientRect();const pad=6;
+  if(b.top<0||b.bottom>vh)el.scrollIntoView({block:"center"});
+  const c=el.getBoundingClientRect();
+  hole.style.cssText=`left:${c.left-pad}px;top:${c.top-pad}px;width:${c.width+pad*2}px;height:${c.height+pad*2}px`;
+  let left=Math.min(Math.max(12,c.left+c.width/2-cw/2),vw-cw-12);
+  let top=c.bottom+14;if(top+card.offsetHeight>vh-12)top=Math.max(12,c.top-14-card.offsetHeight);
+  card.style.left=left+"px";card.style.top=top+"px";
+}
+document.addEventListener("click",e=>{const b=e.target.closest&&e.target.closest("[data-tour]");if(!b||!TOUR.on)return;e.preventDefault();e.stopPropagation();
+  const a=b.dataset.tour;if(a==="skip"){tourEnd();return;}if(a==="back"){TOUR.i=Math.max(0,TOUR.i-1);tourDraw();return;}
+  if(TOUR.i>=TOUR.steps.length-1){tourEnd();toast("You're all set! Take the tour again any time from Help.");return;}TOUR.i++;tourDraw();},true);
+document.addEventListener("keydown",e=>{if(!TOUR.on)return;if(e.key==="Escape"){tourEnd();}else if(e.key==="ArrowRight"){TOUR.i<TOUR.steps.length-1?(TOUR.i++,tourDraw()):tourEnd();}else if(e.key==="ArrowLeft"&&TOUR.i>0){TOUR.i--;tourDraw();}});
+addEventListener("resize",()=>{if(TOUR.on)tourPlace();});
+function tourMaybe(){
+  if(TOUR.checked||TOUR.on||!S.me||!S.prefsLoaded||S.modal||S.fatal)return;
+  if(!S.ready.joins||!S.ready.invites||!S.ready.team||!S.ready.cards)return;
+  if(loginGate())return;if(!(memberOf(S.me)||S.owner))return;
+  const k=tourKind();if(S.prefs&&S.prefs.tourDone&&S.prefs.tourDone[k]){TOUR.checked=true;return;}
+  tourStart(false);
+}
+setInterval(tourMaybe,1500);
+
 async function boot(){
   renderAll();
   if(!window.claude||!window.claude.use){S.fatal="Open this page from claude.ai while signed in to use the CRM.";renderAll();return;}
