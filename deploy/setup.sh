@@ -116,6 +116,7 @@ server {
 }
 EOF
 ln -sf /etc/nginx/sites-available/nanma-crm /etc/nginx/sites-enabled/nanma-crm
+if command -v ufw >/dev/null && ufw status | grep -q "Status: active"; then ufw allow "Nginx Full" >/dev/null; fi
 nginx -t
 systemctl enable --now nginx >/dev/null
 systemctl reload nginx
