@@ -1,34 +1,32 @@
 # Nanma CRM
 
-Internal work-management CRM for Nanma Branding: clients, card tables, subtasks with timers and ratings, internal and client approvals, content calendar, leave, messenger, billing, operating cost, AI credits, attendance and salary (eSSL import), reports and HR tools.
+The work tracker used at Nanma Branding: clients, cards and subtasks, internal and client approval, My Work, calendar, leave, attendance and salary (HR only), billing, reports, awards and team chat.
 
 ## What's in this repository
 
-- `index.html` – the whole app (HTML, CSS and JavaScript in one file).
-
-## Important: how it runs today
-
-This version runs inside **claude.ai** as an artifact. It uses claude.ai's built-in services through `window.claude.use(...)`:
-
-| Service | Used for |
+| Path | What it is |
 |---|---|
-| `db` | All data (clients, cards, time logs, leave, chat, settings…) |
-| `user` | Who is signed in (their id, name and edit rights) |
-| `assets` | Uploaded files and pictures |
-
-These services do not exist on an ordinary web server. Opening `index.html` on Hostinger as it is will show an empty page that can't load or save anything.
-
-## Moving to our own server (Hostinger)
-
-To run on our own server the app needs:
-
-1. **A database** (MySQL on Hostinger) – replaces `db`.
-2. **Sign-in** (our own accounts) – replaces `user`.
-3. **File storage** on the server – replaces `assets`.
-4. **A small server program** (Node.js) that the page talks to for the above.
-
-The page code stays almost the same: a replacement for `window.claude.use(...)` is added that talks to our server instead. Data is copied from the claude.ai version once the server is ready.
+| `index.html` | The whole CRM app (one page). |
+| `server/server.js` | The server program. It stores the data in one SQLite file, handles sign-in, uploads and live updates. Plain Node.js 22, no extra packages. |
+| `server/shim.js` | Connects the app page to the server. |
+| `server/login.html` | The sign-in page (also lets new staff create a login with their invite code). |
+| `deploy/setup.sh` | One-time setup for an Ubuntu server: installs everything, starts the CRM, sets up the web address with HTTPS and nightly backups. |
 
 ## Not stored in this repository
 
-No passwords, salaries or employee data are in this file. All data lives in the database.
+Company data (cards, clients, people, attendance, salaries, logins) is never in this repository. It lives only on the company server in `/var/lib/nanma-crm`, with nightly backups in `/var/backups/nanma-crm`.
+
+## Running it on the server
+
+```
+curl -fsSL https://raw.githubusercontent.com/SniPerAshAn/nanma-crm/main/deploy/setup.sh -o setup.sh && sudo bash setup.sh
+```
+
+After that, `nanma-update` gets the latest version.
+
+## Who can see and change what
+
+- **Owner** – everything.
+- **HR, department heads, managers and admins** – manage cards, clients and people. Salaries and attendance stay HR-only.
+- **Staff** – their own work: start, stop and finish subtasks, comment, chat and request leave.
+- Each person's own settings are private to them.

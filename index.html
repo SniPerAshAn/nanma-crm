@@ -213,7 +213,7 @@ details.addmenu .opts{display:none}details.addmenu[open] .opts{display:block}
 <script>
 "use strict";
 /* ---------- constants ---------- */
-const APP_URL="https://claude.ai/artifact/Xp5YWsj8dYVM6jn7Kwi7v3";
+const APP_URL=window.__NANMA_SERVER?location.origin+"/":"https://claude.ai/artifact/Xp5YWsj8dYVM6jn7Kwi7v3";
 const FIXED={triage:{id:"triage",name:"Triage",color:"#586476"},int:{id:"int",name:"Internal Approval",color:"#A35B00"},client:{id:"client",name:"Client Approval",color:"#163BA6"},done:{id:"done",name:"Done",color:"#16794A"},notnow:{id:"notnow",name:"Not now",color:"#8A94A6"}};
 const DEFAULT_WORK=[{id:"writer",name:"Writer",color:"#1F4FD8"},{id:"designer",name:"Designer",color:"#7A4FD8"},{id:"editor",name:"Editor",color:"#B4282D"},{id:"production",name:"Production",color:"#0E7C86"}];
 const COLCOLORS=["#000000","#FF0000","#B4282D","#0E7C86","#A35B00","#16794A","#586476","#C2410C"];
@@ -373,7 +373,7 @@ function renderBarInner(){
   if(canReport())links.push(["reports","Reports"]);
   if(S.admin)links.push(["activity","Activity"]);
   links.push(["help","Help"]);
-  document.getElementById("bar").innerHTML=`<a class="wordmark" href="#home">nanma<span>.</span></a><nav class="nav" aria-label="Main">${links.map(l=>`<a href="#${l[0]}" class="${r===l[0]?"on":""}">${l[1]}</a>`).join("")}</nav>${run}<form data-form="search" class="row" style="gap:0" role="search"><label class="sr" for="sq">Search</label><input id="sq" class="in" placeholder="Search people, cards…" autocomplete="off" aria-autocomplete="list" aria-controls="qdrop" value="${esc(S.qDraft!=null?S.qDraft:(S.q||""))}" style="background:var(--bar2);border:0;color:var(--on-bar);min-height:38px;width:clamp(140px,14vw,220px)"><div id="qdrop" role="listbox" aria-label="Suggestions" hidden></div></form><a href="#bookmarks" class="${r==="bookmarks"?"on":""}" style="color:var(--bar-muted);text-decoration:none;font-size:20px" aria-label="Bookmarks" title="Bookmarks">★</a><a href="#hey" aria-label="Hey! notifications" title="Hey!" style="position:relative;color:var(--on-bar);text-decoration:none;background:var(--bar2);border-radius:8px;padding:7px 11px;font-weight:700">Hey!${(()=>{const n=heyUnread();return n?`<span style="position:absolute;top:-6px;right:-8px;background:#FF0000;color:#fff;border-radius:999px;font-size:11px;padding:1px 6px">${n>99?"99+":n}</span>`:"";})()}</a>${S.me&&lockOf(S.me)?`<button class="btn sm ghost" data-act="logout" style="background:var(--bar2);color:var(--on-bar);border:0">Log out</button>`:""}${S.me?av(S.me,36):""}`;
+  document.getElementById("bar").innerHTML=`<a class="wordmark" href="#home">nanma<span>.</span></a><nav class="nav" aria-label="Main">${links.map(l=>`<a href="#${l[0]}" class="${r===l[0]?"on":""}">${l[1]}</a>`).join("")}</nav>${run}<form data-form="search" class="row" style="gap:0" role="search"><label class="sr" for="sq">Search</label><input id="sq" class="in" placeholder="Search people, cards…" autocomplete="off" aria-autocomplete="list" aria-controls="qdrop" value="${esc(S.qDraft!=null?S.qDraft:(S.q||""))}" style="background:var(--bar2);border:0;color:var(--on-bar);min-height:38px;width:clamp(140px,14vw,220px)"><div id="qdrop" role="listbox" aria-label="Suggestions" hidden></div></form><a href="#bookmarks" class="${r==="bookmarks"?"on":""}" style="color:var(--bar-muted);text-decoration:none;font-size:20px" aria-label="Bookmarks" title="Bookmarks">★</a><a href="#hey" aria-label="Hey! notifications" title="Hey!" style="position:relative;color:var(--on-bar);text-decoration:none;background:var(--bar2);border-radius:8px;padding:7px 11px;font-weight:700">Hey!${(()=>{const n=heyUnread();return n?`<span style="position:absolute;top:-6px;right:-8px;background:#FF0000;color:#fff;border-radius:999px;font-size:11px;padding:1px 6px">${n>99?"99+":n}</span>`:"";})()}</a>${S.me&&(lockOf(S.me)||window.__NANMA_SERVER)?`<button class="btn sm ghost" data-act="logout" style="background:var(--bar2);color:var(--on-bar);border:0">Log out</button>`:""}${S.me?av(S.me,36):""}`;
 }
 function statusChip(r){return r.status==="done"?`<span class="chip good">Done · ${star(r.stars)}</span>`:r.status==="running"?`<span class="chip info">Running</span>`:r.status==="late"?`<span class="chip bad">Late · −2 ★</span>`:`<span class="chip">To do</span>`;}
 function startBlock(cid,sub){const c=S.cards[cid];if(!c)return "This card no longer exists.";if(c.col===sub.stage)return null;
@@ -1893,6 +1893,7 @@ function setUnlocked(on){const t=on?unlockTok():null;unlockMem=t;try{if(t)sessio
 function loginGate(){
   if(!S.me||S.fatal||route().v==="join")return null;
   if(!S.ready.logs||!S.ready.team||!S.ready.invites||!S.ready.joins)return "loading";
+  if(window.__NANMA_SERVER)return null;
   if(lockOf(S.me))return isUnlocked()?null:"login";
   if(S.team&&S.team.requireLogin&&!isHR())return "nologin";
   return null;
@@ -1940,7 +1941,7 @@ setInterval(()=>{if(!S.me||!lockOf(S.me))return;const open=isUnlocked();
   if(open&&!stayOn()&&Date.now()-lastAct>LOCK_IDLE){setUnlocked(false);S.modal=null;renderAll();renderModal();wasOpen=false;return;}
   if(wasOpen&&!open){setUnlocked(false);S.modal=null;renderAll();renderModal();}
   wasOpen=isUnlocked();},30000);
-function doLogout(){setUnlocked(false);S.modal=null;renderModal();renderAll();}
+function doLogout(){if(window.__NANMA_SERVER){fetch("/api/logout",{method:"POST"}).finally(()=>{location.href="/";});return;}setUnlocked(false);S.modal=null;renderModal();renderAll();}
 
 /* Team page: logins panel */
 function underMe(u){if(isHR())return true;if(u===S.me)return true;const ms=members();const me=ms[S.me],x=ms[u];if(!me||!x)return false;if(x.role==="hr"||x.role==="head"||x.admin)return false;
