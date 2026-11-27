@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Nanma CRM – Sign in</title>
+<style>
+  *{box-sizing:border-box}
+  body{margin:0;min-height:100vh;display:grid;place-items:center;background:#EFEFEF;font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;color:#000}
+  .box{background:#fff;border:1px solid #CCC;border-radius:14px;padding:32px 28px;width:min(380px,92vw)}
+  .logo{font-size:34px;font-weight:800;letter-spacing:-1px;margin-bottom:6px}.logo span{color:#FF0000}
+  h1{font-size:18px;margin:4px 0 18px}
+  label{display:block;font-size:13px;font-weight:600;margin:12px 0 4px}
+  input[type=text],input[type=password]{width:100%;padding:10px 12px;border:1px solid #CCC;border-radius:8px;font-size:15px}
+  input:focus{outline:2px solid #000;outline-offset:1px}
+  .chk{display:flex;gap:8px;align-items:center;font-weight:400;margin-top:14px}
+  button{width:100%;margin-top:18px;padding:11px;border:0;border-radius:8px;background:#000;color:#fff;font-size:15px;font-weight:600;cursor:pointer}
+  button:disabled{opacity:.6}
+  .err{color:#D00000;font-size:14px;min-height:20px;margin-top:10px}
+  .ok{color:#0a7a2f}
+  .switch{margin-top:16px;font-size:14px;text-align:center}.switch a{color:#000}
+  .muted{color:#595959;font-size:13px}
+  [hidden]{display:none!important}
+</style>
+</head>
+<body>
+<div class="box">
+  <div class="logo">nanma<span>.</span></div>
+
+  <form id="signin">
+    <h1>Sign in to the CRM</h1>
+    <label for="u">Username</label><input id="u" type="text" autocomplete="username" autocapitalize="none" required>
+    <label for="p">Password</label><input id="p" type="password" autocomplete="current-password" required>
+    <label class="chk"><input id="stay" type="checkbox"> Keep me signed in for the rest of the day</label>
+    <button>Sign in</button>
+    <div class="err" id="e1" role="alert"></div>
+    <div class="switch">New here with an invite link? <a href="#" id="toJoin">Create your login</a></div>
+  </form>
+
+  <form id="join" hidden>
+    <h1>Create your login</h1>
+    <p class="muted">Use the invite code HR sent you (the part after #join- in your link).</p>
+    <label for="jc">Invite code</label><input id="jc" type="text" autocapitalize="none" required>
+    <label for="ju">Choose a username</label><input id="ju" type="text" autocomplete="username" autocapitalize="none" required>
+    <label for="jp">Choose a password (6+ characters)</label><input id="jp" type="password" autocomplete="new-password" minlength="6" required>
+    <button>Create login</button>
+    <div class="err" id="e2" role="alert"></div>
+    <div class="switch"><a href="#" id="toSignin">Back to sign in</a></div>
+  </form>
+</div>
+<script>
+  const $ = id => document.getElementById(id);
+  const show = j => { $("signin").hidden = j; $("join").hidden = !j; };
+  const m = location.hash.match(/#join-(.+)$/);
+  if (m) { show(true); $("jc").value = decodeURIComponent(m[1]); }
+  $("toJoin").onclick = e => { e.preventDefault(); show(true); };
+  $("toSignin").onclick = e => { e.preventDefault(); show(false); };
+  async function post(url, data) {
+    const r = await fetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(data) });
+    let j = {}; try { j = await r.json(); } catch (_) {}
+    if (!r.ok) throw new Error(j.error || "Something went wrong – please try again.");
+    return j;
+  }
+  $("signin").onsubmit = async e => {
+    e.preventDefault(); const b = e.target.querySelector("button"); b.disabled = true; $("e1").textContent = "Checking…";
+    try { await post("/api/login", { username: $("u").value.trim(), password: $("p").value, stay: $("stay").checked }); location.href = "/" + (location.hash.startsWith("#join-") ? "" : location.hash); }
+    catch (x) { $("e1").textContent = x.message; b.disabled = false; }
+  };
+  $("join").onsubmit = async e => {
+    e.preventDefault(); const b = e.target.querySelector("button"); b.disabled = true; $("e2").textContent = "Saving…";
+    try {
+      await post("/api/join", { code: $("jc").value.trim(), username: $("ju").value.trim(), password: $("jp").value });
+      $("u").value = $("ju").value.trim(); $("p").value = ""; show(false);
+      $("e1").className = "err ok"; $("e1").textContent = "Login created – sign in with your new password."; history.replaceState(null, "", "/");
+    } catch (x) { $("e2").textContent = x.message; b.disabled = false; }
+  };
+</script>
+</body>
+</html>
