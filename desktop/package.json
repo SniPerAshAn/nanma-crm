@@ -1,0 +1,27 @@
+{
+  "name": "nanma-crm-desktop",
+  "productName": "Nanma CRM",
+  "version": "1.0.0",
+  "description": "Nanma CRM for Windows",
+  "author": "Nanma Branding",
+  "main": "main.js",
+  "scripts": { "dist": "electron-builder --win nsis --publish never" },
+  "devDependencies": { "electron": "^33.0.0", "electron-builder": "^25.1.8" },
+  "build": {
+    "appId": "com.nanmabranding.crm",
+    "productName": "Nanma CRM",
+    "files": ["main.js", "build/icon.ico", "build/tray.png", "package.json"],
+    "directories": { "output": "dist", "buildResources": "build" },
+    "win": { "target": "nsis", "icon": "build/icon.ico", "artifactName": "Nanma-CRM-Setup.${ext}" },
+    "nsis": {
+      "oneClick": true,
+      "perMachine": false,
+      "createDesktopShortcut": "always",
+      "createStartMenuShortcut": true,
+      "shortcutName": "Nanma CRM",
+      "runAfterFinish": true,
+      "installerIcon": "build/icon.ico",
+      "uninstallerIcon": "build/icon.ico"
+    }
+  }
+}
