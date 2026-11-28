@@ -29,7 +29,7 @@ const RULES = [
   ["joins", "view", "admin"], ["joins/{self}", "view", "interact"], ["comments", "view", "interact"],
   ["messages", "view", "interact"], ["chat", "view", "interact"], ["leads", "admin", "admin"],
   ["pcards", "admin", "admin"], ["pcomments", "admin", "admin"], ["pmessages", "admin", "admin"],
-  ["pchat", "admin", "admin"], ["pevents", "admin", "admin"], ["activity", "view", "interact"],
+  ["pchat", "admin", "admin"], ["esslp", "admin", "admin"], ["pevents", "admin", "admin"], ["activity", "view", "interact"],
   ["pactivity", "admin", "admin"], ["todolists", "view", "interact"], ["todos", "view", "interact"],
   ["docs", "view", "interact"], ["answers", "view", "interact"], ["boosts", "view", "interact"],
   ["logins", "admin", "admin"], ["logins/{self}", "view", "interact"], ["leaves", "view", "admin"],
@@ -138,11 +138,57 @@ function page() {
     .split("\\n(Sign in to claude.ai with your own account first.)").join("");
 }
 
+// ---------- eSSL / ZKTeco attendance machines (ADMS "cloud server" push) ----------
+function esslDevices() { return getDoc("esslp/devices") || { list: {} }; }
+function esslSaveDevices(d) { d.at = Date.now(); qSet.run("esslp/devices", "esslp", "devices", JSON.stringify(d), Date.now()); broadcast("esslp/devices", d); }
+function esslSeen(sn, ip, n) {
+  const d = esslDevices(); d.list = d.list || {}; const x = d.list[sn] || (d.list[sn] = { first: Date.now(), n: 0, ok: false });
+  x.last = Date.now(); x.ip = ip || x.ip || ""; if (n) { x.n = (x.n || 0) + n; x.lastPunch = Date.now(); }
+  // write at most once a minute unless punches arrived
+  if (n || !x._w || Date.now() - x._w > 60000) { x._w = Date.now(); esslSaveDevices(d); }
+}
+function esslUsers(sn, users) { if (!Object.keys(users).length) return; const d = esslDevices(); const x = (d.list = d.list || {})[sn]; if (!x) return; x.users = Object.assign({}, x.users || {}, users); esslSaveDevices(d); }
+function esslPunches(sn, lines) {
+  const byDay = {}; let n = 0;
+  for (const line of lines) {
+    const f = line.split("\t"); if (f.length < 2) continue;
+    const pin = String(f[0] || "").trim(); const m = String(f[1] || "").trim().match(/^(\d{4}-\d{2}-\d{2})[ T](\d{2}:\d{2}(?::\d{2})?)/);
+    if (!pin || !m || pin.length > 30) continue;
+    ((byDay[m[1]] = byDay[m[1]] || {})[sn + "|" + pin] = byDay[m[1]][sn + "|" + pin] || []).push(m[2].length === 5 ? m[2] + ":00" : m[2]);
+  }
+  for (const [day, add] of Object.entries(byDay)) {
+    const path = "esslp/day_" + day; const doc = getDoc(path) || { p: {} }; doc.p = doc.p || {}; let changed = false;
+    for (const [k, ts] of Object.entries(add)) { const cur = new Set(doc.p[k] || []); const before = cur.size; ts.forEach(t => cur.add(t)); if (cur.size !== before) { doc.p[k] = [...cur].sort(); changed = true; n += cur.size - before; } }
+    if (changed) { doc.at = Date.now(); qSet.run(path, "esslp", "day_" + day, JSON.stringify(doc), Date.now()); broadcast(path, doc); }
+  }
+  return n;
+}
+async function esslHandle(req, res, url, P) {
+  const sn = String(url.searchParams.get("SN") || "").replace(/[^A-Za-z0-9_-]/g, "").slice(0, 40);
+  const ip = req.headers["x-real-ip"] || req.socket.remoteAddress;
+  const txt = b => { res.writeHead(200, { "Content-Type": "text/plain" }); res.end(b); };
+  if (!sn) return txt("OK");
+  if (P === "/iclock/cdata" && req.method === "GET") {
+    esslSeen(sn, ip, 0);
+    return txt(["GET OPTION FROM: " + sn, "ATTLOGStamp=None", "OPERLOGStamp=9999", "ATTPHOTOStamp=None", "ErrorDelay=60", "Delay=30", "TransTimes=00:00;14:05", "TransInterval=1", "TransFlag=TransData AttLog\tOpLog\tEnrollUser", "Realtime=1", "Encrypt=None", ""].join("\n"));
+  }
+  if (P === "/iclock/cdata" && req.method === "POST") {
+    const table = String(url.searchParams.get("table") || "").toUpperCase();
+    const body = (await body_(req, 8e6)).toString("utf8"); const lines = body.split(/\r?\n/).filter(Boolean);
+    if (table === "ATTLOG") { const n = esslPunches(sn, lines); esslSeen(sn, ip, n); return txt("OK: " + lines.length); }
+    if (table === "OPERLOG" || table === "USERINFO") { const users = {}; for (const l of lines) { const m = l.match(/(?:^|[\t ])PIN=([^\t]+).*?\tName=([^\t]*)/); if (m && m[2].trim()) users[m[1].trim()] = m[2].trim().slice(0, 60); } esslUsers(sn, users); }
+    esslSeen(sn, ip, 0); return txt("OK: " + lines.length);
+  }
+  esslSeen(sn, ip, 0); return txt("OK");
+}
+const body_ = (req, limit) => body(req, limit);
+
 // ---------- routes ----------
 const server = http.createServer(async (req, res) => {
   try {
     const url = new URL(req.url, "http://x"); const P = url.pathname;
     if (P === "/healthz") return send(res, 200, { ok: true });
+    if (P.startsWith("/iclock/")) return esslHandle(req, res, url, P);
     if (P === "/shim.js") return send(res, 200, fs.readFileSync(path.join(PUB, "shim.js")), "text/javascript");
     if (P === "/api/login" && req.method === "POST") {
       const ip = req.headers["x-real-ip"] || req.socket.remoteAddress; let f = failed.get(ip) || { n: 0, t: 0 };
