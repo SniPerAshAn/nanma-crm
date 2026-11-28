@@ -416,7 +416,7 @@ function viewHome(){
   const co=(S.prefs&&Array.isArray(S.prefs.clientOrder))?S.prefs.clientOrder:[];const cix=id=>{const i=co.indexOf(id);return i<0?9999:i;};
   const inactiveN=Object.entries(S.clients).filter(([id,c])=>canSeeClient(id)&&c.inactive).length;const clients=Object.entries(S.clients).filter(([id,c])=>canSeeClient(id)&&!c.inactive).sort((a,b)=>(cPin(b[0])-cPin(a[0]))||cix(a[0])-cix(b[0])||(a[1].name||"").localeCompare(b[1].name||""));
   const hr=new Date().getHours();
-  return `<div class="wrap">
+  return `<div class="wrap">${ntfStrip()}
   <div class="between"><div><p class="muted" style="font-weight:600">${new Date().toLocaleDateString("en-IN",{weekday:"long",day:"numeric",month:"long"})}</p><h1 class="h1">Good ${hr<12?"morning":hr<17?"afternoon":"evening"}${S.meP&&S.meP.name?", "+esc(S.meP.name.split(" ")[0]):""}</h1></div>
   ${S.admin?`<div class="row">${canAddClient()?`<button class="btn ghost" data-act="new-client">+ Add client</button>`:""}${canSubs()?`<button class="btn" data-act="new-card">+ New card</button>`:""}</div>`:""}</div>
   ${homeDayStrip()}
@@ -627,7 +627,7 @@ function viewMyWork(){
     timer=`<section class="timer" aria-label="Current timer"><div style="flex:1 1 300px;display:flex;flex-direction:column;gap:5px"><span style="color:var(--bar-muted);font-weight:700;font-size:12px;letter-spacing:.05em">${run?"TIMER RUNNING":"NEXT UP"}</span><strong style="font-size:19px">${isHi(s)?hiChip()+" ":""}${esc(subName(s))} – ${esc(c.title)}</strong><span style="color:var(--bar-muted)" class="small">${esc((S.clients[c.client]||{}).name||"")} · due ${fmtDay(s.day)}${(s.round||0)>0?" · sent back, round "+(s.round+1):""}</span></div>
     <div style="display:flex;flex-direction:column;gap:5px"><span class="clock" style="color:${ov?"#F0B35A":"#5FD39A"}" ${run?`data-tick="${run.t}" data-base="${used-(Date.now()-run.t)}"`:""}>${fmtDur(used)}</span><span style="color:var(--bar-muted)" class="small">${Number(s.min)?"of "+fmtMin(s.min)+" allotted":"· no time limit"}${ov?" · over time (−1 ★ if finished today)":""}</span></div>
     <div class="row">${r.done?`<span class="chip good">Done</span>`:run?`<button class="btn red" data-act="stop">Stop</button>`:startBlock(c.id,s)?`<button class="btn green" disabled title="${esc(startBlock(c.id,s))}">Start</button><span class="small" style="color:#FFD58A;align-self:center">⏸ ${esc(startBlock(c.id,s))}</span>`:`<button class="btn green" data-act="start" data-c="${c.id}" data-s="${s.id}">Start</button>`}${r.done?"":`<button class="btn" style="background:var(--bar2)" data-act="finish" data-c="${c.id}" data-s="${s.id}" ${used>0?"":"disabled"}>Finish</button>`}${r.done?"":reqBtn(s,c.id,"").replace('class="btn  ghost"','class="btn" style="background:var(--bar2)"')}</div></section>`;}
-  return `<div class="wrap"><div><p class="muted" style="font-weight:600">${esc(S.meP&&S.meP.name||"")}</p><h1 class="h1">My Work</h1></div>${timer}
+  return `<div class="wrap">${ntfStrip()}<div><p class="muted" style="font-weight:600">${esc(S.meP&&S.meP.name||"")}</p><h1 class="h1">My Work</h1></div>${timer}
   <div class="split"><section class="panel main-col" style="gap:0"><div class="between" style="margin-bottom:6px"><h2 class="h2">My open subtasks</h2><span class="chip">Finish on the assigned day to keep 5 ★</span></div>${(()=>{const o=open.find(x=>typeof x[1].ord==="number");return open.length>1?`<p class="small muted" style="margin:0 0 6px">Work top to bottom – <strong>1</strong> first.${o?` Order set by ${esc(nm(o[1].ordBy))}.`:" 🔥 high-priority work is at the top."}</p>`:"";})()}
   ${open.length?dueGroups(open).map(g=>{const fold=g.k==="over"&&overMin();return `<div class="duehead${g.cls?" "+g.cls:""}"><h3>${g.label}</h3>${fold?`<span class="chip bad" style="font-weight:700">${g.items.length} overdue</span>`:""}<span class="xs muted">${g.items.length} subtask${g.items.length===1?"":"s"} · ${fmtMin(g.items.reduce((t,x)=>t+(Number(x[1].min)||0),0))}</span>${g.k==="over"?`<button class="btn sm ghost" style="margin-left:auto" data-act="over-min" aria-expanded="${!fold}">${fold?"Show list":"Minimize"}</button>`:""}</div>`+(fold?"":g.items.map(([c,s,r,oi])=>{const re=(s.re||[]).slice(-1)[0];return `<div class="item" style="flex-wrap:wrap">${woBadge(oi+1,isHi(s))}<span class="dot" style="background:${r.running?"var(--accent)":r.status==="late"?"var(--bad)":"#C9D1DD"}"></span><div style="flex:1 1 240px;min-width:0"><button class="linkbtn" style="color:var(--ink);font-weight:700;text-align:left" data-act="open-card" data-c="${c.id}">${esc(subName(s))} – ${esc(c.title)}</button>${isHi(s)?" "+hiChip(true):""}<div class="muted small">${esc((S.clients[c.client]||{}).name||"")} · due ${fmtDay(s.day)} · ${Number(s.min)?fmtMin(s.min)+" allotted":"no time limit"}${re?` · <span style="color:var(--bad)">sent back: ${esc(rLabel(re.reason))}${re.note?" – “"+esc(re.note)+"”":""}</span>`:""}</div></div><span class="small">${tickSpan(s,c.id)}</span>${r.status==="late"?statusChip(r):""}${timerBtns(s,c.id,r,"sm")}</div>`;}).join(""));}).join(""):`<p class="muted small" style="padding-top:8px">Nothing assigned to you right now.</p>`}</section>
   <aside class="side-col"><section class="panel"><h2 class="h2">My rating</h2><div class="tiles" style="grid-template-columns:1fr 1fr"><div class="tile" style="background:var(--list);box-shadow:none"><span class="xs muted" style="font-weight:700">THIS WEEK</span><span class="big">${avg(wkS)}</span></div><div class="tile" style="background:var(--list);box-shadow:none"><span class="xs muted" style="font-weight:700">THIS MONTH</span><span class="big">${avg(mS)}</span></div></div>
@@ -1204,6 +1204,10 @@ document.addEventListener("click",e=>{
     case"new-client":if(!canAddClient()){toast("Only HR, department heads and managers can do this.");break;}openModal({type:"client",f:{name:"",svc:{},svcOther:"",gst:"",pkg:"",billing:"1-31",billingCustom:"",portfolio:"",portfolioLink:"",addresses:[clone(ROWDEF.addresses)],pocs:[clone(ROWDEF.pocs)],deliverables:[clone(ROWDEF.deliverables)],dlv:{},socials:[clone(ROWDEF.socials)],creds:[],am:"",color:"#000000"}});break;
     case"edit-client":if(!canEditClient()){toast("Only HR, department heads and managers can do this.");break;}{const c0=clone(S.clients[t.dataset.id]);c0.competitors=clone(c0.competitors||[]);c0.svc=Object.fromEntries((c0.svcList||[]).map(x=>[x,true]));if(!c0.svcList&&c0.services){c0.svcOther=c0.services;}for(const k of ["addresses","pocs","deliverables","socials"])c0[k]=(c0[k]&&c0[k].length)?c0[k]:[clone(ROWDEF[k])];c0.dlv=c0.dlv||{};c0.creds=clone((S.creds[t.dataset.id]&&S.creds[t.dataset.id].items)||[]);c0.billing=c0.billing||"1-31";openModal({type:"client",edit:true,id:t.dataset.id,f:c0});}break;
     case"pick-color":S.modal.f.color=t.dataset.v;renderModal(true);break;
+    case"ntf-on":ntfEnable();break;
+    case"ntf-off":ntfDisable();break;
+    case"ntf-hide":ntfLS("nanma_ntf_hide","1");renderMain();break;
+    case"ntf-test":try{new Notification("🔔 Nanma CRM",{body:"Test notification – this is how mentions and new work will appear.",tag:"nanma-test2",icon:ntfIcon()});}catch(_){toast("Couldn't show a notification.");}break;
     case"vt-start":vtStart(t.dataset.ed);break;
     case"vn-start":vnStart(t.dataset.ed,t.dataset.post,{c:t.dataset.c,id:t.dataset.id});break;
     case"comp-tab":S.compTab=S.compTab||{};S.compTab[t.dataset.c]=t.dataset.id;renderMain();break;
@@ -1488,7 +1492,8 @@ function heyItems(){
       if(h.t==="create"&&(c.subs||[]).some(s=>s.a===S.me)){const hi=(c.subs||[]).some(s=>s.a===S.me&&isHi(s));out.push({mine:true,at:c.created||h.at,icon:hi?"🔥":"🗂",text:`${nm(h.by)} assigned you a ${hi?"HIGH-PRIORITY ":""}subtask on “${c.title}”${hi?" – do it first":""}`,open:`data-act="open-card" data-c="${esc(c.id)}"`});}
       if(h.t==="pri"&&h.to===S.me&&h.pri==="high")out.push({mine:true,at:h.at,icon:"🔥",text:`${nm(h.by)} marked your ${h.sname||"subtask"} on “${c.title}” as HIGH PRIORITY – do it first`,open:`data-act="open-card" data-c="${esc(c.id)}"`});
       if(h.t==="reassign"&&h.to===S.me)out.push({mine:true,at:h.at,icon:"↩",text:`${nm(h.by)} sent “${c.title}” back to you – ${REASONS[h.reason]?REASONS[h.reason].label:""}`,open:`data-act="open-card" data-c="${esc(c.id)}"`});
-      if(h.t==="move"&&c.assigner===S.me&&(h.to==="int"||h.to==="done"))out.push({mine:true,at:h.at,icon:"✅",text:isAutoMove(h)?`“${c.title}” moved automatically to ${colOf(c.board,h.to).name}`:`${nm(h.by)} moved your card “${c.title}” to ${colOf(c.board,h.to).name}`,open:`data-act="open-card" data-c="${esc(c.id)}"`});}
+      if(h.t==="move"&&h.to!=="int"&&h.to!=="done"&&h.to!=="client"&&(c.subs||[]).some(s=>s.a===S.me&&subStage(s)===h.to&&!rate(s,c.id).done))out.push({mine:true,at:h.at,icon:"▶",text:`“${c.title}” has reached ${colOf(c.board,h.to).name} – your ${subName((c.subs||[]).find(s=>s.a===S.me&&subStage(s)===h.to))} can start now`,open:`data-act="open-card" data-c="${esc(c.id)}"`});
+      if(h.t==="move"&&c.assigner===S.me&&(h.to==="int"||h.to==="done"))out.push({mine:true,at:h.at,icon:"✅",text:h.to==="int"?`“${c.title}” is waiting for your approval (${colOf(c.board,h.to).name})`:isAutoMove(h)?`“${c.title}” moved automatically to ${colOf(c.board,h.to).name}`:`${nm(h.by)} moved your card “${c.title}” to ${colOf(c.board,h.to).name}`,open:`data-act="open-card" data-c="${esc(c.id)}"`});}
   }
   for(const x of Object.values(S.comments)){if(x.by===S.me)continue;const tg=S.cards[x.card]||S.messages[x.card]||S.docs[x.card];if(!tg){if(re&&re.test(x.text||""))out.push({at:x.at,icon:"@",text:`${nm(x.by)} mentioned you in a comment: ${(x.text||"").slice(0,90)}`});continue;}
     const involved=tg.by===S.me||tg.assigner===S.me||(tg.subs||[]).some(s=>s.a===S.me);const ment=re&&re.test(x.text);
@@ -1537,7 +1542,7 @@ function viewHey(){const all=heyItems();const seen=(S.prefs&&S.prefs.heySeenPrev
   return `<div class="wrap"><h1 class="h1">Hey! <span class="muted" style="font-size:18px">what's new for you</span></h1>
   <div class="row" role="tablist" aria-label="Notifications" style="gap:6px">${tb("me","My notifications",mine)}${tb("all","All updates",all)}</div>
   <p class="small muted" style="margin:0">${tab==="me"?"Only things addressed to you: work assigned or sent back to you, @mentions of you, answers to your requests, your cards and calendars, your to-dos and check-ins.":"Everything above, plus team updates: comments on cards you're part of, and approvals waiting for any department head or HR."}</p>
-  ${remPanel()}
+  ${ntfPanel()}${remPanel()}
   <section class="panel" style="gap:0">${items.length?items.map(x=>`<div class="item" style="${x.at>seen||x.sticky?"background:#F5F5F5;margin:0 -20px;padding:10px 20px":""}"><span style="width:28px;text-align:center;font-size:17px;flex:none">${esc(x.icon)}</span><div style="flex:1;min-width:0">${x.href?`<a href="${x.href}" style="color:var(--ink);text-decoration:none;font-weight:600">${esc(x.text)}</a>`:`<button class="linkbtn" style="color:var(--ink);font-weight:600;text-align:left" ${x.open}>${esc(x.text)}</button>`}<div class="muted xs">${fmtWhen(x.at)}${tab==="all"&&!x.mine?" · team update":""}</div></div>${x.at>seen||x.sticky?`<span class="newdot"></span>`:""}</div>`).join(""):`<p class="muted" style="padding:10px 0">${tab==="me"?"Nothing for you right now. Work assigned to you, @mentions and replies to your requests show up here.":"Nothing new. Assignments, mentions, replies and check-ins show up here."}</p>`}</section></div>`;}
 
 /* ---------- Search ---------- */
@@ -3252,6 +3257,36 @@ function tourMaybe(){
   tourStart(false);
 }
 setInterval(tourMaybe,1500);
+
+/* ================= Windows / desktop notifications ================= */
+const NTF={last:0,started:Date.now(),busy:false};
+const ntfSupported=()=>"Notification" in window&&window.isSecureContext;
+const ntfLS=(k,v)=>{try{if(v===undefined)return localStorage.getItem(k);if(v===null)localStorage.removeItem(k);else localStorage.setItem(k,String(v));}catch(_){return null;}};
+const ntfOn=()=>ntfSupported()&&Notification.permission==="granted"&&ntfLS("nanma_ntf")!=="off";
+function ntfKey(x){return (x.icon||"")+"|"+(x.at||0)+"|"+(x.text||"").slice(0,60);}
+async function ntfEnable(){if(!ntfSupported()){toast("This browser can't show notifications here.");return;}
+  let p=Notification.permission;if(p==="default")p=await Notification.requestPermission();
+  if(p==="granted"){ntfLS("nanma_ntf","on");ntfLS("nanma_ntf_last",Date.now());try{new Notification("Nanma CRM",{body:"Notifications are on. You'll get one when someone mentions you or sends you work.",tag:"nanma-test",icon:ntfIcon()});}catch(_){}toast("Windows notifications are on");}
+  else if(p==="denied")toast("Notifications are blocked. Click the padlock next to the address, set Notifications to Allow, then reload.");
+  renderMain();}
+function ntfDisable(){ntfLS("nanma_ntf","off");toast("Windows notifications are off on this computer");renderMain();}
+function ntfIcon(){return "data:image/svg+xml,"+encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><rect width="64" height="64" rx="14" fill="#000"/><text x="18" y="44" font-family="Arial" font-weight="700" font-size="36" fill="#fff">n</text><circle cx="45" cy="42" r="5" fill="#FF0000"/></svg>');}
+function ntfPanel(){if(!ntfSupported())return `<section class="panel"><h2 class="h2">🔔 Windows notifications</h2><p class="small muted">This browser can't show notifications for the CRM. Use Chrome or Edge.</p></section>`;
+  const p=Notification.permission,on=ntfOn();
+  return `<section class="panel" style="gap:8px"><div class="between" style="flex-wrap:wrap;gap:8px"><h2 class="h2">🔔 Windows notifications ${on?`<span class="chip good">On</span>`:`<span class="chip">Off</span>`}</h2>${on?`<div class="row" style="gap:8px"><button class="btn sm ghost" data-act="ntf-test">Send a test</button><button class="btn sm ghost" data-act="ntf-off">Turn off</button></div>`:p==="denied"?"":`<button class="btn sm" data-act="ntf-on">Turn on</button>`}</div>
+  <p class="small muted" style="margin:0">${p==="denied"?"Notifications are blocked for this site. Click the padlock next to the web address → <strong>Notifications</strong> → <strong>Allow</strong>, then reload the page.":"You get a pop-up in the corner of your screen when someone @mentions you, assigns you work, sends work back, when a card reaches your subtask, and when work you assigned is waiting for your approval."} Keep the CRM open in a tab – it can be minimised or behind other windows. This setting is for this computer only.</p></section>`;}
+function ntfStrip(){if(!ntfSupported()||Notification.permission!=="default"||ntfLS("nanma_ntf_hide"))return "";
+  return `<div class="notice" style="display:flex;gap:10px;align-items:center;flex-wrap:wrap"><span>🔔 <strong>Turn on Windows notifications</strong> so you never miss a mention, new work or an approval.</span><span style="flex:1"></span><button class="btn sm" data-act="ntf-on">Turn on</button><button class="btn sm ghost" data-act="ntf-hide">Not now</button></div>`;}
+function ntfCheck(){if(!ntfOn()||NTF.busy||!S.me||!S.ready||!S.ready.cards)return;NTF.busy=true;
+  try{let last=Number(ntfLS("nanma_ntf_last"))||NTF.started;const now=Date.now();
+   const items=heyItems().filter(x=>(x.mine||x.icon==="@")&&!x.sticky&&x.at>last&&x.at<=now+60000).sort((a,b)=>a.at-b.at);
+   if(items.length){const show=items.length>3?items.slice(-2):items;
+    for(const x of show){try{const n=new Notification((x.icon?x.icon+" ":"")+"Nanma CRM",{body:String(x.text||"").replace(/<[^>]+>/g,""),tag:ntfKey(x),icon:ntfIcon(),renotify:false});n.onclick=()=>{window.focus();ntfOpen(x);n.close();};}catch(_){}}
+    if(items.length>3){try{const n=new Notification("Nanma CRM",{body:`${items.length-2} more updates – open Hey! to see them`,tag:"nanma-more",icon:ntfIcon()});n.onclick=()=>{window.focus();location.hash="#hey";n.close();};}catch(_){}}
+    ntfLS("nanma_ntf_last",Math.max(last,...items.map(x=>x.at)));}
+  }finally{NTF.busy=false;}}
+function ntfOpen(x){const m=(x.open||"").match(/data-act="(open-card|open-post)" data-(?:c|id)="([^"]+)"/);if(m){if(m[1]==="open-card")openModal({type:"card",id:m[2]});else openModal({type:"postview",id:m[2]});return;}if(x.href)location.hash=x.href;else location.hash="#hey";}
+setInterval(ntfCheck,5000);
 
 async function boot(){
   renderAll();
