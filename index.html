@@ -209,6 +209,10 @@ details.addmenu .opts{display:none}details.addmenu[open] .opts{display:block}
 #tour .tour-card h2{margin:4px 0 6px;font-size:18px}#tour .tour-card p{margin:0 0 14px;line-height:1.5;color:#222}
 #tour .tour-meta{font-size:12px;font-weight:700;color:#595959;text-transform:uppercase;letter-spacing:.04em}
 #tour .tour-btns{display:flex;align-items:center;gap:8px}
+#voicebar .vbar{position:fixed;left:50%;bottom:22px;transform:translateX(-50%);z-index:70;background:#fff;color:#000;border:2px solid #000;border-radius:999px;padding:8px 10px 8px 16px;display:flex;align-items:center;gap:10px;box-shadow:0 10px 30px rgba(0,0,0,.25);flex-wrap:wrap;max-width:94vw}
+#voicebar .vdot{width:12px;height:12px;border-radius:50%;background:#FF0000;animation:vpulse 1s infinite}
+@keyframes vpulse{0%,100%{opacity:1}50%{opacity:.3}}
+#voicebar select{padding:4px 6px;border-radius:8px;border:1px solid #ccc}
 </style>
 </head>
 <body>
@@ -1200,6 +1204,8 @@ document.addEventListener("click",e=>{
     case"new-client":if(!canAddClient()){toast("Only HR, department heads and managers can do this.");break;}openModal({type:"client",f:{name:"",svc:{},svcOther:"",gst:"",pkg:"",billing:"1-31",billingCustom:"",portfolio:"",portfolioLink:"",addresses:[clone(ROWDEF.addresses)],pocs:[clone(ROWDEF.pocs)],deliverables:[clone(ROWDEF.deliverables)],dlv:{},socials:[clone(ROWDEF.socials)],creds:[],am:"",color:"#000000"}});break;
     case"edit-client":if(!canEditClient()){toast("Only HR, department heads and managers can do this.");break;}{const c0=clone(S.clients[t.dataset.id]);c0.competitors=clone(c0.competitors||[]);c0.svc=Object.fromEntries((c0.svcList||[]).map(x=>[x,true]));if(!c0.svcList&&c0.services){c0.svcOther=c0.services;}for(const k of ["addresses","pocs","deliverables","socials"])c0[k]=(c0[k]&&c0[k].length)?c0[k]:[clone(ROWDEF[k])];c0.dlv=c0.dlv||{};c0.creds=clone((S.creds[t.dataset.id]&&S.creds[t.dataset.id].items)||[]);c0.billing=c0.billing||"1-31";openModal({type:"client",edit:true,id:t.dataset.id,f:c0});}break;
     case"pick-color":S.modal.f.color=t.dataset.v;renderModal(true);break;
+    case"vt-start":vtStart(t.dataset.ed);break;
+    case"vn-start":vnStart(t.dataset.ed,t.dataset.post,{c:t.dataset.c,id:t.dataset.id});break;
     case"comp-tab":S.compTab=S.compTab||{};S.compTab[t.dataset.c]=t.dataset.id;renderMain();break;
     case"delete-client":if(!canPeople()){toast("Only HR and department heads can do this.");break;}{const id=S.modal.id;const n=Object.values(S.cards).filter(x=>x.client===id).length;if(n){toast("Move or remove its "+n+" cards first.");break;}for(const b of Object.values(S.boards))if(b.client===id)del("boards/"+b.id);logAct(`removed client “${(S.clients[id]||{}).name||""}”`,id);del("clients/"+id);closeModal();location.hash="#home";break;}
     case"comment":{const v=rteValue("c-"+c);const txt=v.text;if(!txt)break;if(!S.db||!S.me){toast("Sign in to comment.");break;}const id=rid();const cc=S.cards[c]||S.messages[c];write((cc&&cc.board&&isPriv(cc.board)?"pcomments/":"comments/")+id,{card:c,by:S.me,text:txt.slice(0,4000),html:v.html,at:Date.now()});{const tg=S.cards[c]||S.messages[c];if(tg)logAct(`commented on “${tg.title}”`,tg.client,{card:c});}rteClear("c-"+c);break;}
@@ -1661,8 +1667,46 @@ function richEditor(id,ph,postAct,postData){
   ${pop==="hilite"?`<div class="rte-pop">${HILITES.map(([c,l])=>`<button type="button" class="rtesw" style="background:${c}" data-act="rte-hl" data-ed="${id}" data-c="${c}" aria-label="${l} highlight"></button>`).join("")}<button type="button" class="btn sm ghost" data-act="rte-hl" data-ed="${id}" data-c="">No highlight</button></div>`:""}
   ${pop==="link"?`<div class="rte-pop"><label class="sr" for="rtel-${id}">Link address</label><input id="rtel-${id}" class="in" placeholder="https://…" style="max-width:320px"><button type="button" class="btn sm" data-act="rte-link" data-ed="${id}">Add link</button></div>`:""}
   <div class="rte-area rtx" contenteditable="true" role="textbox" aria-multiline="true" aria-label="${esc(ph)}" data-rte="${id}" id="rte-${id}" data-ph="${esc(ph)}"></div>
-  <div class="row" style="gap:8px;margin-top:8px"><button type="button" class="btn" data-act="${postAct}" ${postData}>Add this comment</button><button type="button" class="btn ghost" data-act="rte-clear" data-ed="${id}">Never mind</button></div></div>`;
+  <div class="row" style="gap:8px;margin-top:8px"><button type="button" class="btn" data-act="${postAct}" ${postData}>Add this comment</button>${postAct==="comment"||postAct==="doc-comment"?voiceBtns(id,postAct,postData):""}<button type="button" class="btn ghost" data-act="rte-clear" data-ed="${id}">Never mind</button></div></div>`;
 }
+/* ================= Voice: voice typing + voice notes in comments ================= */
+const VOICE={mode:"",ed:"",post:"",data:{},mr:null,stream:null,chunks:[],t0:0,timer:null,recog:null,lang:(()=>{try{return localStorage.getItem("nanma_vlang")||"en-IN";}catch(_){return "en-IN";}})()};
+const vtOK=()=>!!(window.SpeechRecognition||window.webkitSpeechRecognition);
+const vnOK=()=>!!(navigator.mediaDevices&&navigator.mediaDevices.getUserMedia&&window.MediaRecorder);
+const mmss=ms=>{const s=Math.max(0,Math.round(ms/1000));return Math.floor(s/60)+":"+String(s%60).padStart(2,"0");};
+function voiceBtns(id,postAct,postData){return `${vtOK()?`<button type="button" class="btn ghost" data-act="vt-start" data-ed="${id}" title="Speak and it types into the comment box">🎙 Voice typing</button>`:""}${vnOK()?`<button type="button" class="btn ghost" data-act="vn-start" data-ed="${id}" data-post="${esc(postAct)}" ${postData} title="Record a voice message">🔴 Voice note</button>`:""}`;}
+function voiceBar(){let r=document.getElementById("voicebar");if(!r){r=document.createElement("div");r.id="voicebar";document.body.appendChild(r);}
+  if(!VOICE.mode){r.innerHTML="";return;}
+  if(VOICE.mode==="type")r.innerHTML=`<div class="vbar" role="status" aria-live="polite"><span class="vdot"></span><strong>Listening…</strong><span class="small">Speak and it types into the comment.</span><select data-vlang aria-label="Language"><option value="en-IN" ${VOICE.lang==="en-IN"?"selected":""}>English</option><option value="ml-IN" ${VOICE.lang==="ml-IN"?"selected":""}>Malayalam</option></select><button type="button" class="btn sm" data-vact="vt-stop">Done</button></div>`;
+  else if(VOICE.mode==="rec")r.innerHTML=`<div class="vbar" role="status"><span class="vdot"></span><strong>Recording <span data-vtime>${mmss(Date.now()-VOICE.t0)}</span></strong><span class="xs muted">Max 5 min</span><button type="button" class="btn sm" data-vact="vn-send">Stop &amp; send</button><button type="button" class="btn sm ghost" data-vact="vn-cancel">Cancel</button></div>`;
+  else if(VOICE.mode==="up")r.innerHTML=`<div class="vbar" role="status"><strong>Sending voice note…</strong></div>`;}
+function vtStart(ed){if(VOICE.mode){toast("Finish the current voice first.");return;}const SR=window.SpeechRecognition||window.webkitSpeechRecognition;const rec=new SR();rec.lang=VOICE.lang;rec.continuous=true;rec.interimResults=false;
+  rec.onresult=e=>{let txt="";for(let i=e.resultIndex;i<e.results.length;i++)if(e.results[i].isFinal)txt+=e.results[i][0].transcript;txt=txt.trim();if(!txt)return;const el=document.getElementById("rte-"+VOICE.ed);if(!el)return;const cur=(el.innerText||"").replace(/\s+$/,"");el.focus();const r=document.createRange();r.selectNodeContents(el);r.collapse(false);const sel=document.getSelection();sel.removeAllRanges();sel.addRange(r);document.execCommand("insertText",false,(cur?" ":"")+txt);rteSave(VOICE.ed);};
+  rec.onerror=e=>{if(e.error==="not-allowed"||e.error==="service-not-allowed")toast("Allow the microphone for this site to use voice typing.");else if(e.error==="network")toast("Voice typing needs an internet connection.");else if(e.error!=="no-speech"&&e.error!=="aborted")toast("Voice typing stopped ("+e.error+").");};
+  rec.onend=()=>{if(VOICE.mode==="type"&&VOICE.recog===rec){try{rec.start();}catch(_){vtStop();}}};
+  VOICE.mode="type";VOICE.ed=ed;VOICE.recog=rec;try{rec.start();}catch(_){VOICE.mode="";toast("Couldn't start voice typing.");}voiceBar();}
+function vtStop(){const r=VOICE.recog;VOICE.recog=null;VOICE.mode="";if(r)try{r.stop();}catch(_){}voiceBar();const el=document.getElementById("rte-"+VOICE.ed);if(el)el.focus();}
+async function vnStart(ed,post,data){if(VOICE.mode){toast("Finish the current voice first.");return;}
+  let stream;try{stream=await navigator.mediaDevices.getUserMedia({audio:true});}catch(_){toast("Allow the microphone for this site to record a voice note.");return;}
+  const type=["audio/webm;codecs=opus","audio/webm","audio/mp4","audio/ogg"].find(t=>MediaRecorder.isTypeSupported&&MediaRecorder.isTypeSupported(t))||"";
+  const mr=type?new MediaRecorder(stream,{mimeType:type}):new MediaRecorder(stream);
+  Object.assign(VOICE,{mode:"rec",ed,post,data,mr,stream,chunks:[],t0:Date.now(),send:false});
+  mr.ondataavailable=e=>{if(e.data&&e.data.size)VOICE.chunks.push(e.data);};
+  mr.onstop=()=>{clearInterval(VOICE.timer);stream.getTracks().forEach(t=>t.stop());const dur=Date.now()-VOICE.t0;if(!VOICE.send){VOICE.mode="";voiceBar();return;}if(dur<800){VOICE.mode="";voiceBar();toast("Too short – hold on a little longer.");return;}vnUpload(new Blob(VOICE.chunks,{type:mr.mimeType||type||"audio/webm"}),dur);};
+  mr.start(1000);VOICE.timer=setInterval(()=>{const el=document.querySelector("[data-vtime]");const d=Date.now()-VOICE.t0;if(el)el.textContent=mmss(d);if(d>=300000)vnStop(true);},500);voiceBar();}
+function vnStop(send){VOICE.send=!!send;try{VOICE.mr&&VOICE.mr.state!=="inactive"&&VOICE.mr.stop();}catch(_){VOICE.mode="";voiceBar();}}
+async function vnUpload(blob,dur){VOICE.mode="up";voiceBar();
+  try{if(!S.assets)S.assets=await window.claude.use("assets");if(!S.assets)throw new Error("no uploads");const ext=/mp4/.test(blob.type)?"m4a":/ogg/.test(blob.type)?"ogg":"webm";
+   const r=await S.assets.upload(new File([blob],"voice-note-"+new Date().toISOString().slice(0,16).replace(/[:T]/g,"-")+"."+ext,{type:blob.type}));
+   const audio={url:r.url,type:r.contentType||blob.type,dur:Math.round(dur/1000)};const text="🎤 Voice note ("+mmss(dur)+")";const d=VOICE.data||{};
+   if(VOICE.post==="doc-comment"){const doc=S.docs[d.id];write("comments/"+rid(),{card:d.id,by:S.me,text,audio,at:Date.now()});if(doc)logAct(`sent a voice note on “${doc.title}”`,doc.client);}
+   else{const c=d.c;const cc=S.cards[c]||S.messages[c];write((cc&&cc.board&&isPriv(cc.board)?"pcomments/":"comments/")+rid(),{card:c,by:S.me,text,audio,at:Date.now()});if(cc)logAct(`sent a voice note on “${cc.title}”`,cc.client,{card:c});}
+   toast("Voice note sent");}catch(_){toast("Couldn't send the voice note – try again.");}
+  VOICE.mode="";voiceBar();}
+document.addEventListener("click",e=>{const b=e.target.closest&&e.target.closest("[data-vact]");if(!b)return;e.preventDefault();const a=b.dataset.vact;if(a==="vt-stop")vtStop();else if(a==="vn-send")vnStop(true);else if(a==="vn-cancel")vnStop(false);},true);
+document.addEventListener("change",e=>{if(e.target&&e.target.matches&&e.target.matches("[data-vlang]")){VOICE.lang=e.target.value;try{localStorage.setItem("nanma_vlang",VOICE.lang);}catch(_){}if(VOICE.mode==="type"){const ed=VOICE.ed;vtStop();setTimeout(()=>vtStart(ed),300);}}});
+function audioHtml(a){return a&&a.url?`<div class="row" style="gap:8px;margin-top:4px;flex-wrap:wrap"><audio controls preload="none" src="${esc(a.url)}" style="height:36px;max-width:100%"></audio>${a.dur?`<span class="xs muted">${mmss(a.dur*1000)}</span>`:""}</div>`:"";}
+
 /* keep the caret selection inside the editor while using the toolbar */
 let rteRange=null;
 document.addEventListener("selectionchange",()=>{const sel=document.getSelection();if(!sel||!sel.rangeCount)return;const n=sel.anchorNode;const ed=n&&(n.nodeType===1?n:n.parentElement);if(ed&&ed.closest&&ed.closest("[data-rte]"))rteRange=sel.getRangeAt(0).cloneRange();});
@@ -1714,7 +1758,7 @@ function rteSafeSrc(u,img){if(!u||/^\s*(javascript|data|vbscript):/i.test(u))ret
 function rgbToHex(c){c=String(c).trim().toLowerCase();if(c.startsWith("#"))return c;const m=c.match(/rgba?\((\d+),\s*(\d+),\s*(\d+)/);if(!m)return c;return "#"+[m[1],m[2],m[3]].map(x=>Number(x).toString(16).padStart(2,"0")).join("").toUpperCase().toLowerCase();}
 function rteValue(id){const ed=document.getElementById("rte-"+id);if(!ed)return{html:"",text:""};const html=cleanHTML(ed.innerHTML);const t=document.createElement("div");t.innerHTML=html;const text=(t.innerText||t.textContent||"").replace(/ /g," ").trim();const hasMedia=/<(img|table|hr)\b/i.test(html);return{html:(text||hasMedia)?html:"",text:text||(hasMedia?"[attachment]":"")};}
 function rteClear(id){const ed=document.getElementById("rte-"+id);if(ed)ed.innerHTML="";if(S.rteDrafts)delete S.rteDrafts[id];S.rtePop=null;}
-function commentBody(x){return x.html?`<div class="rtx">${cleanHTML(x.html)}</div>`:`<div style="white-space:pre-wrap">${esc(x.text)}</div>`;}
+function commentBody(x){if(x.audio&&x.audio.url)return `<div class="small muted">🎤 Voice note</div>${audioHtml(x.audio)}`;return x.html?`<div class="rtx">${cleanHTML(x.html)}</div>`:`<div style="white-space:pre-wrap">${esc(x.text)}</div>`;}
 function rteRestore(scope,focusId){if(S.rteDrafts)(scope||document).querySelectorAll("[data-rte]").forEach(ed=>{const h=S.rteDrafts[ed.dataset.rte];if(h&&!ed.innerHTML)ed.innerHTML=h;});if(focusId){const ed=document.getElementById("rte-"+focusId);if(ed){ed.focus();const r=document.createRange();r.selectNodeContents(ed);r.collapse(false);const sel=document.getSelection();sel.removeAllRanges();sel.addRange(r);if(mnt)mentionCheck(ed);}}}
 const rteActive=()=>{const a=document.activeElement;return a&&a.dataset&&a.dataset.rte||null;};
 
