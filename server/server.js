@@ -188,6 +188,7 @@ const server = http.createServer(async (req, res) => {
   try {
     const url = new URL(req.url, "http://x"); const P = url.pathname;
     if (P === "/healthz") return send(res, 200, { ok: true });
+    if (P === "/install") { res.writeHead(302, { Location: "https://github.com/SniPerAshAn/nanma-crm/releases/latest/download/Nanma-CRM-Setup.exe" }); return res.end(); }
     if (P.startsWith("/iclock/")) return esslHandle(req, res, url, P);
     if (P === "/shim.js") return send(res, 200, fs.readFileSync(path.join(PUB, "shim.js")), "text/javascript");
     if (P === "/api/login" && req.method === "POST") {
