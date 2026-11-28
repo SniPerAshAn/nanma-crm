@@ -145,8 +145,9 @@ const server = http.createServer(async (req, res) => {
     if (P === "/healthz") return send(res, 200, { ok: true });
     if (P === "/shim.js") return send(res, 200, fs.readFileSync(path.join(PUB, "shim.js")), "text/javascript");
     if (P === "/api/login" && req.method === "POST") {
-      const ip = req.headers["x-real-ip"] || req.socket.remoteAddress; const f = failed.get(ip) || { n: 0, t: 0 };
-      if (f.n >= 8 && Date.now() - f.t < 10 * 60e3) return send(res, 429, { error: "Too many tries – wait 10 minutes." });
+      const ip = req.headers["x-real-ip"] || req.socket.remoteAddress; let f = failed.get(ip) || { n: 0, t: 0 };
+      if (f.n >= 8 && Date.now() - f.t < 60e3) return send(res, 429, { error: "Too many tries – wait 1 minute and try again." });
+      if (f.n >= 8) { failed.delete(ip); f = { n: 0, t: 0 }; }
       const b = JSON.parse((await body(req)).toString() || "{}"); const uid = findLogin(b.username, b.password);
       if (!uid) { failed.set(ip, { n: f.n + 1, t: Date.now() }); return send(res, 401, { error: "Wrong username or password." }); }
       failed.delete(ip); const tok = crypto.randomBytes(32).toString("hex"); const stay = !!b.stay;
