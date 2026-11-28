@@ -1207,6 +1207,12 @@ document.addEventListener("click",e=>{
     case"new-client":if(!canAddClient()){toast("Only HR, department heads and managers can do this.");break;}openModal({type:"client",f:{name:"",svc:{},svcOther:"",gst:"",pkg:"",billing:"1-31",billingCustom:"",portfolio:"",portfolioLink:"",addresses:[clone(ROWDEF.addresses)],pocs:[clone(ROWDEF.pocs)],deliverables:[clone(ROWDEF.deliverables)],dlv:{},socials:[clone(ROWDEF.socials)],creds:[],am:"",color:"#000000"}});break;
     case"edit-client":if(!canEditClient()){toast("Only HR, department heads and managers can do this.");break;}{const c0=clone(S.clients[t.dataset.id]);c0.competitors=clone(c0.competitors||[]);c0.svc=Object.fromEntries((c0.svcList||[]).map(x=>[x,true]));if(!c0.svcList&&c0.services){c0.svcOther=c0.services;}for(const k of ["addresses","pocs","deliverables","socials"])c0[k]=(c0[k]&&c0[k].length)?c0[k]:[clone(ROWDEF[k])];c0.dlv=c0.dlv||{};c0.creds=clone((S.creds[t.dataset.id]&&S.creds[t.dataset.id].items)||[]);c0.billing=c0.billing||"1-31";openModal({type:"client",edit:true,id:t.dataset.id,f:c0});}break;
     case"pick-color":S.modal.f.color=t.dataset.v;renderModal(true);break;
+    case"lg-day":S.lgDay=t.dataset.d;renderMain();break;
+    case"lg-month":{const n=Number(t.dataset.n);S.lgYm=n===0?thisMonth():ymShift(S.lgYm||thisMonth(),n);S.lgDay=null;renderMain();break;}
+    case"lg-dev-ok":esslDevSet(t.dataset.sn,{ok:true,okBy:S.me,okAt:Date.now()});toast("Machine connected – logins will now show on the calendar");break;
+    case"lg-dev-off":esslDevSet(t.dataset.sn,{ok:false});break;
+    case"lg-dev-del":esslDevSet(t.dataset.sn,null);break;
+    case"lg-unmap":esslMapSet(t.dataset.pin,"");break;
     case"ntf-on":ntfEnable();break;
     case"ntf-off":ntfDisable();break;
     case"ntf-hide":ntfLS("nanma_ntf_hide","1");renderMain();break;
@@ -1255,6 +1261,7 @@ document.addEventListener("change",e=>{
   if(a==="act-client"){S.actClient=t.value;renderMain();}
   if(a==="aw-month"){S.awMonth=t.value||thisMonth();renderMain();}
   if(a==="nc-start"&&isHR()){const nx=clone(S.ncal||{});nx.speech=Object.assign({},nx.speech||{},{start:t.value});ncSave(nx,`set the education speech rotation to start on ${fmtDay(t.value)}`);}
+  if(a==="lg-map"&&isHR()){if(t.value)esslMapSet(t.dataset.pin,t.value);}
   if(a==="nc-skip"&&isHR()){const nx=clone(S.ncal||{});nx.speech=nx.speech||{};nx.speech.skip=nx.speech.skip||{};if(t.checked)delete nx.speech.skip[t.dataset.u];else nx.speech.skip[t.dataset.u]=true;nx.speech.order=speechOrder();ncSave(nx,`${t.checked?"added":"removed"} ${nm(t.dataset.u)} ${t.checked?"to":"from"} the education speech rotation`);}
   if(a==="rem-toggle"){const pr=clone(S.prefs||{});pr.remind=Object.assign({},pr.remind||{},{[t.dataset.k]:t.checked});savePrefs(pr);toast(t.checked?"Turned on.":"Turned off.");setTimeout(remTick,500);}
   if(a==="asg-pick"){S.asgDay=t.value||today();renderMain();}
@@ -2262,9 +2269,57 @@ function homeDayStrip(){const t=today();const i=dayInfo(t);const sp=speakerOn(t)
   const c=NC_TYPES[i.type]||NC_TYPES.work;
   return `<a class="daystrip" href="#nanma-cal"><span class="chip" style="background:${c[2]};color:${c[1]};font-weight:700">${esc(dayLabel(i))}</span>${sp?`<span>🎤 Today's education speech: <strong>${esc(sp===S.me?"You":nm(sp))}</strong></span>`:""}${spT&&spT===S.me?`<span>Tomorrow it's <strong>your</strong> turn</span>`:""}${(()=>{const ol=Object.keys(members()).filter(u=>onLeave(u,t));return ol.length?`<span>🌴 On leave today: <strong>${ol.map(u=>esc(nm(u).split(" ")[0])).join(", ")}</strong></span>`:"";})()}${nh?`<span class="muted">Next holiday: <strong>${esc(nh[1].name||"Holiday")}</strong> · ${esc(fmtDay(nh[0]))}</span>`:""}<span class="muted" style="margin-left:auto">Calendar ›</span></a>`;}
 
+/* ================= eSSL live logins (machine pushes punches to the server) ================= */
+const ESSL_CACHE={src:null,map:null,dev:null,idx:{}};
+function esslDevList(){return ((S.esslp||{}).devices||{}).list||{};}
+function esslLiveIdx(){const src=S.esslp||{},map=esslMap(),dev=esslDevList();
+  if(ESSL_CACHE.src===src&&ESSL_CACHE.map===map)return ESSL_CACHE.idx;
+  const idx={};for(const [k,doc] of Object.entries(src)){if(!k.startsWith("day_"))continue;const d=k.slice(4);
+    for(const [key,ts] of Object.entries(doc.p||{})){const [sn,pin]=key.split("|");if(!dev[sn]||!dev[sn].ok)continue;const u=map[pin];if(!u||u==="skip")continue;((idx[d]=idx[d]||{})[u]=idx[d][u]||[]).push(...ts);}}
+  for(const d in idx)for(const u in idx[d])idx[d][u]=[...new Set(idx[d][u])].sort();
+  Object.assign(ESSL_CACHE,{src,map,dev,idx});return idx;}
+function esslLive(u,d){const ts=(esslLiveIdx()[d]||{})[u];return ts&&ts.length?ts:null;}
+function esslUnmapped(){const map=esslMap(),dev=esslDevList(),out={};for(const [k,doc] of Object.entries(S.esslp||{})){if(!k.startsWith("day_"))continue;for(const key of Object.keys(doc.p||{})){const [sn,pin]=key.split("|");if(!dev[sn]||!dev[sn].ok||map[pin])continue;const o=out[pin]||(out[pin]={pin,sn,days:0,last:""});o.days++;if(k.slice(4)>o.last)o.last=k.slice(4);}}return Object.values(out).sort((a,b)=>b.last.localeCompare(a.last));}
+function esslUserName(pin){for(const x of Object.values(esslDevList()))if(x.users&&x.users[pin])return x.users[pin];return "";}
+function esslMapSet(pin,u){const map=Object.assign({},esslMap());if(u)map[pin]=u;else delete map[pin];const md={kind:"attmap",map,by:S.me,at:Date.now()};write("leads/att_map",md);S.creds.att_map=Object.assign({id:"att_map"},md);renderMain();}
+function esslDevSet(sn,patch){const d=clone((S.esslp||{}).devices||{list:{}});delete d.id;d.list=d.list||{};if(patch===null)delete d.list[sn];else d.list[sn]=Object.assign({},d.list[sn]||{},patch);d.at=Date.now();write("esslp/devices",d);S.esslp=Object.assign({},S.esslp,{devices:Object.assign({id:"devices"},d)});renderMain();}
+function lgFrom(){const f=Object.values(esslDevList()).filter(x=>x.ok&&x.first).map(x=>x.first);return f.length?dayOf(Math.min(...f)):null;}
+function lgDoj(u){const m=members()[u];const e=m&&S.creds&&S.creds["emp_"+m.code];return (e&&e.doj)||"";}
+function lgStatus(u,d){const ts=esslLive(u,d)||[];const doj=lgDoj(u);if(doj&&d<doj)return{k:"off",label:"Not joined yet",cls:"",ts:[],tin:""};const code=attCode(u,d);const tin=inTime(u,d);const late=!!tin&&tin>attSet().late;
+  if(["PL","PLH","UL","ULH"].includes(code))return{k:"leave",label:code.startsWith("P")?"Paid leave":"Unpaid leave",cls:"info",ts,tin};
+  if(code==="WO"||code==="HO")return{k:"off",label:(code==="WO"?"Weekly off":"Holiday")+(tin?" – came in":""),cls:tin?"info":"",ts,tin};
+  if(tin)return{k:late?"late":"ok",label:late?"Late":"On time",cls:late?"warn":"good",ts,tin};
+  const from=lgFrom();if(!esslOf(u,d)&&(!from||d<from))return{k:"nodata",label:"No machine data",cls:"",ts,tin};
+  if(d<today()||(d===today()&&new Date().toTimeString().slice(0,5)>attSet().late))return{k:"none",label:"No login",cls:"bad",ts,tin};
+  return{k:"wait",label:"Not in yet",cls:"",ts,tin};}
+function lgDay(d){const ppl=payPeople();const r={ok:0,late:0,none:0,leave:0,rows:[]};for(const u of ppl){const st=lgStatus(u,d);r.rows.push([u,st]);if(st.k==="ok")r.ok++;else if(st.k==="late")r.late++;else if(st.k==="none")r.none++;else if(st.k==="leave")r.leave++;}return r;}
+function viewLogins(){const ym=S.lgYm||thisMonth();const td=today();const sel=S.lgDay||(ym===thisMonth()?td:ym+"-01");
+  const first=new Date(ym+"-01T00:00:00");const lead=(first.getDay()+6)%7;const dim=new Date(first.getFullYear(),first.getMonth()+1,0).getDate();
+  const cells=[];for(let i=0;i<lead;i++)cells.push(null);for(let d=1;d<=dim;d++)cells.push(ym+"-"+String(d).padStart(2,"0"));while(cells.length%7)cells.push(null);
+  const devs=Object.entries(esslDevList());const okDevs=devs.filter(([,x])=>x.ok);
+  const grid=`<div class="ccgrid">${["Mon","Tue","Wed","Thu","Fri","Sat","Sun"].map(w=>`<div class="cchd">${w}</div>`).join("")}${cells.map(d=>{if(!d)return `<div class="cccell off"></div>`;const i=dayInfo(d);const off=i.type==="off"||i.type==="holiday";const fut=d>td;const s=!off&&!fut?lgDay(d):null;
+    return `<button class="cccell nccell${d===td?" today":""}" style="background:${d===sel?"#000":off?"#F7F8FA":"#fff"};color:${d===sel?"#fff":"inherit"}" data-act="lg-day" data-d="${d}" aria-pressed="${d===sel}"><div class="between"><span class="ccnum">${Number(d.slice(8))}</span></div>${off?`<span class="xs muted">${esc(dayLabel(i))}</span>`:fut||!(s.ok+s.late+s.none+s.leave)?"":`<span class="xs" style="display:grid;gap:2px;text-align:left"><span>✔ ${s.ok+s.late} in</span>${s.late?`<span style="color:${d===sel?"#FFB3B3":"var(--bad)"}">⏰ ${s.late} late</span>`:""}${s.none?`<span style="color:${d===sel?"#FFB3B3":"var(--bad)"};font-weight:700">✖ ${s.none} no login</span>`:""}</span>`}</button>`;}).join("")}</div>`;
+  const day=lgDay(sel);const rows=day.rows.slice().sort((a,b)=>{const o={none:0,late:1,ok:2,wait:3,leave:4,nodata:5,off:6};return (o[a[1].k]-o[b[1].k])||nm(a[0]).localeCompare(nm(b[0]));});
+  const detail=`<section class="panel" style="gap:8px"><div class="between" style="flex-wrap:wrap;gap:8px"><h2 class="h2">${esc(fmtDay(sel))}</h2><div class="row small" style="gap:12px;flex-wrap:wrap"><span class="chip good">${day.ok} on time</span><span class="chip warn">${day.late} late</span><span class="chip bad">${day.none} no login</span><span class="chip info">${day.leave} on leave</span></div></div>
+    <div class="tablewrap"><table><thead><tr><th>Name</th><th>First in</th><th>Last out</th><th>All punches</th><th>Status</th></tr></thead><tbody>${rows.map(([u,st])=>{const out=outTime(u,sel);return `<tr><td><div class="row" style="gap:8px">${av(u,24)}<span>${esc(nm(u))}<span class="xs muted"> · ${esc((members()[u]||{}).desig||"")}</span></span></div></td><td><strong>${esc(st.tin||"—")}</strong></td><td>${esc(out&&out!==st.tin?out:"—")}</td><td class="xs muted">${st.ts.length?st.ts.map(t=>t.slice(0,5)).join(", "):esslOf(u,sel)?"from eSSL report":"—"}</td><td><span class="chip ${st.cls}">${st.label}</span></td></tr>`;}).join("")}</tbody></table></div>
+    <p class="xs muted" style="margin:0">Late = first login after ${esc(attSet().late)} (change it in Attendance → Settings). Times come straight from the eSSL machine${okDevs.length?"":" once it is connected below"}; an uploaded eSSL report fills days the machine didn't send.</p></section>`;
+  const um=esslUnmapped();
+  const setup=`<section class="panel" style="gap:10px"><div class="between"><h2 class="h2">eSSL machine</h2>${okDevs.length?`<span class="chip good">Connected</span>`:`<span class="chip warn">Not connected yet</span>`}</div>
+    ${devs.length?`<div class="tablewrap"><table><thead><tr><th>Machine (serial no.)</th><th>Last contact</th><th>Punches received</th><th></th></tr></thead><tbody>${devs.map(([sn,x])=>`<tr><td><strong>${esc(x.name||sn)}</strong>${x.name?`<div class="xs muted">${esc(sn)}</div>`:""}</td><td>${x.last?esc(fmtWhen(x.last)):"—"}${x.last&&Date.now()-x.last>15*60000?` <span class="chip bad">Offline?</span>`:""}</td><td>${x.n||0}</td><td>${x.ok?`<button class="btn sm ghost" data-act="lg-dev-off" data-sn="${esc(sn)}">Stop using</button>`:`<button class="btn sm" data-act="lg-dev-ok" data-sn="${esc(sn)}">Use this machine</button> <button class="btn sm ghost" data-act="lg-dev-del" data-sn="${esc(sn)}">Ignore</button>`}</td></tr>`).join("")}</tbody></table></div>`:""}
+    ${devs.some(([,x])=>!x.ok)?`<p class="small" style="margin:0"><strong>A new machine contacted the CRM.</strong> Press <strong>Use this machine</strong> only if the serial number matches your office eSSL machine (Menu → System info → Device info).</p>`:""}
+    <details ${okDevs.length?"":"open"}><summary class="small" style="cursor:pointer;font-weight:700">How to connect the machine</summary><ol class="small" style="margin:8px 0 0;padding-left:18px;display:grid;gap:4px">
+      <li>On the eSSL machine: <strong>Menu → Comm. (Communication) → Cloud Server Setting</strong> (on some models <em>ADMS</em> or <em>Web Server</em>).</li>
+      <li>Server address: <strong>crm.nanmabranding.cloud</strong> · Server port: <strong>8081</strong> · HTTPS / SSL: <strong>Off</strong> · Proxy: <strong>Off</strong>. Turn on <strong>Enable domain name</strong> if it asks.</li>
+      <li>Make sure the machine is on the office internet (Menu → Comm. → Ethernet or Wi-Fi).</li>
+      <li>Restart the machine. Within a few minutes it appears in the list above – press <strong>Use this machine</strong>.</li>
+      <li>Match each machine user number to a person below. After that, logins show up here on their own, live.</li></ol></details>
+    ${um.length?`<h3 class="h2" style="font-size:16px">Match machine users to people – ${um.length} waiting</h3><div class="tablewrap"><table><thead><tr><th>Machine user no.</th><th>Name on machine</th><th>Last punch</th><th>This is…</th></tr></thead><tbody>${um.map(x=>`<tr><td><strong>${esc(x.pin)}</strong></td><td>${esc(esslUserName(x.pin)||"—")}</td><td>${esc(fmtDay(x.last))}</td><td><select data-act-change="lg-map" data-pin="${esc(x.pin)}"><option value="">Choose a person…</option>${payPeople().map(u=>`<option value="${esc(u)}" ${esslGuess(x.pin,esslUserName(x.pin))===u?"":""}>${esc(nm(u))}</option>`).join("")}<option value="skip">Not an employee – ignore</option></select>${esslGuess(x.pin,esslUserName(x.pin))?`<div class="xs muted">Looks like ${esc(nm(esslGuess(x.pin,esslUserName(x.pin))))}</div>`:""}</td></tr>`).join("")}</tbody></table></div>`:""}
+    ${Object.keys(esslMap()).length?`<details><summary class="small" style="cursor:pointer">Matched users (${Object.keys(esslMap()).length})</summary><div class="small" style="display:grid;gap:4px;margin-top:6px">${Object.entries(esslMap()).map(([pin,u])=>`<div class="row" style="gap:8px"><span class="chip">${esc(pin)}</span>${u==="skip"?"<span class=\"muted\">Ignored</span>":esc(nm(u))}<button class="linkbtn xs" data-act="lg-unmap" data-pin="${esc(pin)}">Undo</button></div>`).join("")}</div></details>`:""}</section>`;
+  return `<section class="panel"><div class="between" style="flex-wrap:wrap;gap:10px"><div class="row" style="gap:6px"><button class="btn sm ghost" data-act="lg-month" data-n="-1" aria-label="Previous month">‹</button><h2 class="h2" style="min-width:170px;text-align:center">${esc(ymName(ym))}</h2><button class="btn sm ghost" data-act="lg-month" data-n="1" aria-label="Next month">›</button>${ym!==thisMonth()?`<button class="linkbtn small" data-act="lg-month" data-n="0">This month</button>`:""}</div><span class="small muted">Click a day to see who logged in</span></div>${grid}</section>${detail}${setup}`;}
+
 function viewNanmaCal(){
-  const tab=S.ncTab||"month";const hr=isHR();
-  const tabs=`<div class="row" role="tablist" aria-label="Calendar view" style="gap:6px">${[["month","Month"],["year","Holidays this year"],["speech","Education speech"]].map(([k,l])=>`<button role="tab" aria-selected="${tab===k}" class="heytab${tab===k?" on":""}" data-act="nc-tab" data-k="${k}">${l}</button>`).join("")}</div>`;
+  const tab=S.ncTab||"month";const hr=isHR();const lgOK=hr&&S.admin;
+  const tabs=`<div class="row" role="tablist" aria-label="Calendar view" style="gap:6px">${[["month","Month"],["year","Holidays this year"],["speech","Education speech"],...(lgOK?[["logins","Staff logins"]]:[])].map(([k,l])=>`<button role="tab" aria-selected="${tab===k}" class="heytab${tab===k?" on":""}" data-act="nc-tab" data-k="${k}">${l}</button>`).join("")}</div>`;
   let body="";
   if(tab==="month"){const ym=ncYm();const first=new Date(ym+"-01T00:00:00");const lead=(first.getDay()+6)%7;const dim=new Date(first.getFullYear(),first.getMonth()+1,0).getDate();
     const cells=[];for(let i=0;i<lead;i++)cells.push(null);for(let d=1;d<=dim;d++)cells.push(ym+"-"+String(d).padStart(2,"0"));while(cells.length%7)cells.push(null);
@@ -2278,6 +2333,7 @@ function viewNanmaCal(){
       ${grid}
       <p class="xs muted" style="margin:0">Monday to Saturday are working days and Sundays are off. Every 4th Saturday is a half day until 1:15 pm.${hr?" Click any day to change it, or to swap the speaker.":""}</p>
       ${hols.length?`<div class="small"><strong>Holidays this month:</strong> ${hols.map(([d,i])=>`${esc(i.name||"Holiday")} (${esc(fmtDay(d).replace(/^\\w+, /,""))})`).join(" · ")}</div>`:""}</section>`;}
+  else if(tab==="logins"&&lgOK){body=viewLogins();}
   else if(tab==="year"){const y=S.ncYear||Number(today().slice(0,4));const months=[...Array(12)].map((_,m)=>y+"-"+String(m+1).padStart(2,"0"));
     const rows=months.map(ym=>{const dim=new Date(y,Number(ym.slice(5)),0).getDate();let w=0,h=0,o=0;const hs=[];for(let d=1;d<=dim;d++){const ds=ym+"-"+String(d).padStart(2,"0");const i=dayInfo(ds);if(i.type==="work")w++;else if(i.type==="half")h++;else if(i.type==="holiday"){o++;hs.push([ds,i]);}}return {ym,w,h,o,hs};});
     const all=rows.flatMap(r=>r.hs);
@@ -2536,7 +2592,7 @@ function esslApply(){const imp=S.esslImp;if(!imp)return;const map=Object.assign(
   Object.entries(byYm).forEach(([ym,us])=>{const doc=clone(attDoc(ym));if(doc.locked)return;doc.essl=Object.assign({},doc.essl||{});Object.entries(us).forEach(([u,ds])=>{doc.essl[u]=Object.assign({},doc.essl[u]||{},ds);});doc.esslAt=Date.now();attSave(ym,doc);});
   const md={kind:"attmap",map,by:S.me,at:Date.now()};write("leads/att_map",md);S.creds.att_map=Object.assign({id:"att_map"},md);
   logAct(`imported eSSL attendance for ${n} people (${Object.keys(byYm).join(", ")})`,"");toast(`Imported eSSL attendance for ${n} ${n===1?"person":"people"}`);S.esslImp=null;renderMain();}
-function esslOf(u,d){return(((attDoc(d.slice(0,7)).essl||{})[u])||{})[d]||null;}
+function esslOf(u,d){const e=(((attDoc(d.slice(0,7)).essl||{})[u])||{})[d];if(e)return e;const ts=S.esslp?esslLive(u,d):null;if(!ts)return null;const i=ts[0].slice(0,5),o=ts.length>1?ts[ts.length-1].slice(0,5):"";return{i,o,s:"P",live:true,raw:ts.join(" ")};}
 function esslPanel(){const imp=S.esslImp;if(!imp)return"";const ppl=payPeople();const ents=Object.entries(imp.codes).sort((a,b)=>Object.values(b[1].days).filter(x=>x.s==="P"||x.s==="H").length-Object.values(a[1].days).filter(x=>x.s==="P"||x.s==="H").length);
   const days=[...new Set(ents.flatMap(([,v])=>Object.keys(v.days)))].sort();
   return `<section class="panel" style="border:2px solid #000"><div class="between" style="flex-wrap:wrap;gap:8px"><h2 class="h2" style="font-size:18px;margin:0">Import eSSL report</h2><span class="small muted">${esc(imp.file)} · ${days.length?esc(fmtDay(days[0]))+" – "+esc(fmtDay(days[days.length-1])):""}</span></div>
@@ -3320,6 +3376,7 @@ async function boot(){
   {const A={};const am=()=>{S.activity=Object.assign({},A.a||{},A.p||{});const v=route().v;if(v==="activity"||v==="client")renderMain();};db.collection("activity").orderBy("at","desc").limit(800).onSnapshot(s=>{A.a=docs(s);am();},()=>{});if(S.editor)db.collection("pactivity").orderBy("at","desc").limit(400).onSnapshot(s=>{A.p=docs(s);am();},()=>{});}
   for(const k of ["todolists","todos","docs","checkins","answers","links","boosts"])db.collection(k).onSnapshot(s=>{S[k]=docs(s);ok(k);},fail(k));
   if(S.editor)db.collection("leads").onSnapshot(s=>{S.creds=docs(s);S.credsReady=true;if(route().v==="client")renderMain();},()=>{});
+  if(S.admin)db.collection("esslp").onSnapshot(s=>{S.esslp=docs(s);const v=route().v;if(v==="nanma-cal"||v==="attendance")renderMain();},()=>{});
   S.ccal={};db.collection("ccal").onSnapshot(s=>{S.ccal=docs(s);ok("ccal");},fail("ccal"));
   db.collection("boards").onSnapshot(s=>{S.boards=docs(s);ok("boards");},fail("boards"));
   const M={};const merge=(k)=>{S[k]=Object.assign({},M[k]||{},M["p"+k]||{});};
