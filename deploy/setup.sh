@@ -116,6 +116,21 @@ server {
 }
 EOF
 ln -sf /etc/nginx/sites-available/nanma-crm /etc/nginx/sites-enabled/nanma-crm
+# eSSL attendance machine pushes punches here over plain HTTP (port 8081, only /iclock/)
+cat > /etc/nginx/sites-available/nanma-essl <<ESSL
+server {
+    listen 8081;
+    server_name _;
+    location /iclock/ {
+        proxy_pass http://127.0.0.1:$PORT;
+        proxy_set_header X-Real-IP \$remote_addr;
+        client_max_body_size 10m;
+    }
+    location / { return 404; }
+}
+ESSL
+ln -sf /etc/nginx/sites-available/nanma-essl /etc/nginx/sites-enabled/nanma-essl
+if command -v ufw >/dev/null && ufw status | grep -q "Status: active"; then ufw allow 8081/tcp >/dev/null; fi
 if command -v ufw >/dev/null && ufw status | grep -q "Status: active"; then ufw allow "Nginx Full" >/dev/null; fi
 nginx -t
 systemctl enable --now nginx >/dev/null
